@@ -1,0 +1,434 @@
+/*
+
+Global
+=========================
+List<DairyProduct> products = new List<DairyProduct>();
+            products = ProductManager.GetAllProduct();
+            this.Application["products"] = products;
+
+ACCOUNTDAL
+==============================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Data;
+using System.Data.SqlClient;
+
+namespace DAL
+{
+    public class AccountManagementDAL
+    {
+        static string constring = @"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename=C:\Users\Rudra\source\repos\Solution2\HeerendraWEB\App_Data\Database1.mdf;Integrated Security=True";
+        public static bool ValidateUser(string email,string password)
+        {
+            bool status = false;
+            SqlConnection con = new SqlConnection();
+            SqlCommand cmd = new SqlCommand();
+            con.ConnectionString = constring;
+            cmd.CommandText = "SELECT * FROM USERTAB WHERE email=@email and password=@password";
+            cmd.Parameters.Add(new SqlParameter("@email",email));
+            cmd.Parameters.Add(new SqlParameter("@password", password));
+            cmd.Connection = con;
+
+            try
+            {
+                con.Open();
+                SqlDataReader read = cmd.ExecuteReader();
+                if(read.HasRows)
+                {
+                    status = true;
+                }
+                read.Close();
+            }
+            catch(SqlException ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                con.Close();
+            }
+
+            return status;
+        }
+    }
+}
+
+PRODUCTDAL
+==============================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Data;
+using System.Data.SqlClient;
+using BOL;
+
+namespace DAL
+{
+    public class ProductManagementDAL
+    {
+        static string conString = @"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename=C:\Users\Rudra\source\repos\Solution2\HeerendraWEB\App_Data\Database1.mdf;Integrated Security=True";
+        public static List<DairyProduct> GetAllProduct()
+        {
+            List<DairyProduct> products = new List<DairyProduct>();
+            IDbConnection con = new SqlConnection(conString);
+
+            IDbCommand cmd = new SqlCommand("Select * From Products", con as SqlConnection);
+            SqlDataAdapter da = new SqlDataAdapter(cmd as SqlCommand);
+            DataSet ds = new DataSet();
+            da.Fill(ds);
+            DataRowCollection rows = ds.Tables[0].Rows;
+            foreach (DataRow row in rows)
+            {
+                int productId = int.Parse(row["ProductId"].ToString());
+                string productName = row["ProductName"].ToString();
+                string description = row["description"].ToString();
+                int quantity = int.Parse(row["Quantity"].ToString());
+                int price = int.Parse(row["price"].ToString());
+                string image = row["image"].ToString();
+
+                products.Add(new DairyProduct()
+                {
+                    ProductId = productId,
+                    ProductName = productName,
+                    ProductDescription = description,
+                    Quantity=quantity,
+                    ProductPrice=price,
+                    ProductImage=image
+                } );
+            }
+                return products;
+            
+        }
+
+        public static bool AddProduct(string pname,string description,int quantity,double price,string img)
+        {
+            bool status = false;
+            IDbConnection con = new SqlConnection(conString);
+            string query="Select * from Products";
+            IDbCommand cmd = new SqlCommand(query,con as SqlConnection);
+            SqlDataAdapter da = new SqlDataAdapter(cmd as SqlCommand);
+            DataSet ds = new DataSet();
+            try
+            {
+                SqlCommandBuilder cmmdbldr = new SqlCommandBuilder(da);
+                da.Fill(ds);
+                DataRow newRow = ds.Tables[0].NewRow();
+                newRow["productName"] = pname;
+                newRow["description"] = description;
+                newRow["quantity"] = quantity;
+                newRow["price"] = price;
+                newRow["image"] = img;
+                ds.Tables[0].Rows.Add(newRow);
+                da.Update(ds);
+                status = true;
+             }
+            catch(SqlException ex)
+            {
+                string exceptionmsg = ex.Message;
+            }
+
+            return status;
+           
+        }
+
+
+	public static bool DeleteProduct(int id)
+        {
+            bool status = false;
+            //SqlConnection con = new SqlConnection(conString);
+            IDbConnection con = new SqlConnection(conString);
+            string query = "DELETE FROM Products WHERE productId=@ProductId";
+
+            SqlCommand cmd = new SqlCommand(query,con as SqlConnection);
+            cmd.Parameters.Add(new SqlParameter("@ProductID", id));
+
+            try {
+                con.Open();
+                cmd.ExecuteNonQuery();
+                status = true;
+            }
+            catch (SqlException ex)
+            {
+                string exceptionmsg = ex.Message;
+            }
+            finally
+            {
+                con.Close();
+            }
+
+            return status;
+        }
+
+
+    }
+}
+
+ACCBLL
+=========================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using DAL;
+
+namespace BLL
+{
+    public static class AccountManager
+    {
+        public static bool ValidateUser(string email,string password)
+        {
+            return AccountManagementDAL.ValidateUser(email, password);
+        }
+    }
+}
+
+PROBLL
+================================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using BOL;
+using DAL;
+
+namespace BLL
+{
+    public static class ProductManager
+    {
+        public static List<DairyProduct> GetAllProduct()
+        {
+            return ProductManagementDAL.GetAllProduct();
+        }
+
+        public static bool AddProduct(string pname, string description, int quantity, double price, string img)
+        {
+            return ProductManagementDAL.AddProduct(pname, description, quantity, price, img);
+        }
+    }
+}
+
+ACCCONTROLLER
+========================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using System.Web.Mvc;
+using BLL;
+using System.Web.Security;
+
+namespace HeerendraWEB.Controllers
+{
+    public class AccountController : Controller
+    {
+        // GET: Account
+        public ActionResult Index()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        public ActionResult Index(string email,string password,string returnurl)
+        {
+            if(AccountManager.ValidateUser(email,password))
+            {
+                FormsAuthentication.SetAuthCookie(email, false);
+                return Redirect(returnurl ?? Url.Action("Index", "Product"));
+            }
+            else { 
+            return View();
+            }
+        }
+    }
+}
+
+
+PRODUCTController
+===================================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using System.Web.Mvc;
+using BOL;
+using BLL;
+
+namespace HeerendraWEB.Controllers
+{
+    public class ProductController : Controller
+    {
+        // GET: Product
+        public ActionResult Index()
+        {
+            List<DairyProduct> products = (List<DairyProduct>)this.HttpContext.Application["products"];
+            this.ViewData["products"] = products;
+            return View();
+        }
+
+        public ActionResult Details(int id)
+        {
+            DairyProduct foundproduct = null;
+            List<DairyProduct> products = (List<DairyProduct>)this.HttpContext.Application["products"];
+            foreach(DairyProduct pro in products)
+            {
+                if(pro.ProductId==id)
+                {
+                    foundproduct = pro;
+                    break;
+                }
+            }
+            return View(foundproduct);
+
+
+        }
+        public ActionResult Insert()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        public ActionResult Insert(string pname, string description, int quantity, double price, string img,string returnurl)
+        {
+            if(ProductManager.AddProduct(pname, description, quantity, price, img))
+            {
+                
+                return Redirect(returnurl ?? Url.Action("Index","Product"));
+            }
+            return View();
+        }
+        
+    }
+}
+
+LOGIN
+================================
+
+
+@{
+    ViewBag.Title = "Login";
+}
+
+<h2>Enter Login Details</h2>
+@using (Html.BeginForm())
+{
+    @Html.ValidationSummary()
+    <p>
+        <label>Email :</label>
+        <input name="email" />
+    </p>
+    <p>
+        <label>Password :</label>
+        <input name="password" type="password" />
+    </p>
+    <input type="submit" value="Login" />
+}
+
+
+LIST
+==========================================
+
+@using BOL;
+@{
+    ViewBag.Title = "Product Catlog";
+}
+
+<h2>Product Catlog</h2>
+
+
+@{ 
+    List<DairyProduct> products = this.ViewData["products"] as List<DairyProduct>;
+
+}
+<ol>
+    @{
+
+        foreach (DairyProduct p in products)
+        {
+             <li>@Html.ActionLink(p.ProductName, "Details", new { id = p.ProductId })</li>
+            }
+
+        <p>@Html.ActionLink("Insert Product","Insert")</p>
+        }
+
+</ol>
+
+
+DETAILS
+==============================================
+
+@{
+    ViewBag.Title = "Details";
+}
+
+<h2>Product Details</h2>
+@model BOL.DairyProduct
+<h3 align="center">@Model.ProductName Deatails</h3>
+<p align="center">ID:@Model.ProductId</p>
+<p align="center">@Model.ProductName</p>
+<p align="center">@Model.ProductDescription</p>
+<p align="center">@Model.Quantity</p>
+<p align="center">@Model.ProductPrice</p>
+<p align="center"><img src="@Model.ProductImage" width="200" height="200" /></p>
+
+
+INSERT
+================================================
+
+
+@{
+    ViewBag.Title = "Insert";
+}
+
+<h2>Insert</h2>
+
+@using (Html.BeginForm())
+{
+    @Html.ValidationSummary()
+<table>
+    <tr>
+       
+        <th><label>Product Name</label></th>
+        <th><input type="text" name="pname" /></th>
+        
+    </tr>
+    <tr>
+       
+        <th><label>Description</label></th>
+        <th><input type="text" name="description" /></th>
+        
+    </tr>
+    <tr>
+           <th><label>Quantity</label></th>
+           <th><input type="text" name="quantity" /></th>
+    </tr>
+    <tr>        
+        <th><label>Price</label></th>
+        <th><input type="text" name="price" /></th>        
+    </tr>
+    <tr>        
+        <th><label>Image</label></th>
+        <th><input type="text" name="img" /></th>        
+    </tr>
+    <tr>
+        <th colspan="2"><input type="submit" value="Register" /></th>
+    </tr>
+</table>
+
+}
+
+===============================================
+
+*/
